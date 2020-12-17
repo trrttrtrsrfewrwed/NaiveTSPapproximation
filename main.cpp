@@ -1,7 +1,6 @@
 #include <iostream>
 #include <vector>
-#include "Vector.cpp"
-#include "Graph.h"
+#include "EuclideanGraph.h"
 
 int main() {
     size_t N;
@@ -14,7 +13,10 @@ int main() {
         std::cin >> points[i];
     }
 
-    Graph graph(points);
-    graph.FindTSPApproximation();
+    EuclideanGraph graph(points);
+    std::cout << "Running ... \n";
+    graph.FindTSPApproximation("christofides naive");
+    graph.FindTSPApproximation("christofides");
+    graph.calcAntigreedy();
     return 0;
 }
