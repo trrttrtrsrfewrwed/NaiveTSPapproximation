@@ -14,8 +14,6 @@ public:
      * @param method_name - название используемого алгоритма
      */
     void FindTSPApproximation(const std::string& method_name = "christofides");
-
-    void calcAntigreedy();
 private:
     /**
      * Представление ребра в графе
@@ -85,10 +83,44 @@ private:
 
     std::vector<Vector> points_;
 
-    bool CheckGraph(const std::vector<size_t>& currState, const std::vector<std::vector<size_t>>& adj_matrix);
+    /**
+     *  Находит путь, приближающий оптимальный путь в задаче коммивояжёра, с помощью антижадного алгоритма
+     * @return вершины пути
+     */
+    std::vector<size_t> CalcAntigreedy();
 
+    /**
+     *
+     * @param currState - текущее состояние рёбер (добавлено/не зафиксировано/удалено)
+     * @param edges - ребра графа в порядке убывания веса
+     * @param adj_matrix - матрица смежности, в которой для пары индексов хранится номер ребра в массиве edges
+     * @return выполнены ли 2 условия:
+     * 1 - нет циклов, содержащих не все вершины.
+     * 2 - каждой вершине инцидентно не более 2 добавленных рёбер и не более (n - 3) удаленных рёбер
+     */
+    bool CheckGraph(const std::vector<size_t>& currState, const std::vector<EuclideanGraph::Edge>& edges, const std::vector<std::vector<size_t>>& adj_matrix);
+
+    /**
+     * Изменяет текущее состояние рёбер:
+     *  1. Удаление возможности появления мелких циклов.
+     *  2. Удаление ненужных ребер в тех случаях, когда среди инцидентных вершине ребер уже
+     *  есть два фиксированных ребра.
+     *  3. Фиксирование ребер, если у конкретной вершины осталось всего два инцидентных
+     *  ей не удаленных ребра
+     * @param currState - текущее состояние рёбер (добавлено/не зафиксировано/удалено)
+     * @param edges - ребра графа в порядке убывания веса
+     * @param adj_matrix - матрица смежности, в которой для пары индексов хранится номер ребра в массиве edges
+     */
     void Processing(std::vector<size_t>& currState, const std::vector<EuclideanGraph::Edge>& edges, const std::vector<std::vector<size_t>>& adj_matrix);
 
+    /**
+     * Удаляет возможности появления мелких циклов
+     * @param n_start - начальная вершинап добавленного ребра
+     * @param n_end - конечная вершина добавленного ребра     * @param edges - ребра графа в порядке убывания веса
+
+     * @param currState - текущее состояние рёбер (добавлено/не зафиксировано/удалено)
+     * @param adj_matrix - матрица смежности, в которой для пары индексов хранится номер ребра в массиве edges
+     */
     void RemovingSmallCycles(size_t n_start, size_t n_end, std::vector<size_t> &currState,
                              const std::vector<std::vector<size_t>> &adj_matrix);
 };

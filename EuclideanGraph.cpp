@@ -1,15 +1,13 @@
 
 #include "EuclideanGraph.h"
 #include "./Matching/Matching.h"
-#include "./Matching/Graph.h"
-
-#include <utility>
 #include <unordered_set>
 #include <algorithm>
 #include <map>
 #include <stack>
 #include <iostream>
-
+#include <chrono>
+#include <queue>
 
 EuclideanGraph::EuclideanGraph(std::vector<Vector> points) : points_(std::move(points)) {
 
@@ -18,14 +16,21 @@ EuclideanGraph::EuclideanGraph(std::vector<Vector> points) : points_(std::move(p
 void EuclideanGraph::FindTSPApproximation(const std::string& method_name) {
     std::vector<size_t> result;
 
+    auto start = std::chrono::steady_clock::now();
     if (method_name == "christofides") {
         result = ConvertEulerToHamilton(FindEulerCycle(BuildMSTWithMatching(false)));
     } else if (method_name == "christofides naive") {
         result = ConvertEulerToHamilton(FindEulerCycle(BuildMSTWithMatching(true)));
+    } else if (method_name == "antigreedy") {
+        result = CalcAntigreedy();
     }
+    auto end = std::chrono::steady_clock::now();
+    auto diff = end - start;
+
+    std::cout << "Time: " << chrono::duration <double, milli> (diff).count() << " ms" << endl;
 
     double length = 0;
-    std::cout << "Путь: ";
+    std::cout << "Path: ";
     for (size_t i = 0; i < points_.size(); ++i) {
         size_t from = result[i];
         std::cout << result[i] << " ";
@@ -34,7 +39,7 @@ void EuclideanGraph::FindTSPApproximation(const std::string& method_name) {
     }
     std::cout << std::endl;
 
-    std::cout << "Длина: " << length << std::endl;
+    std::cout << "Length: " << length << std::endl;
 
 }
 
@@ -232,7 +237,7 @@ std::vector<size_t> EuclideanGraph::ConvertEulerToHamilton(const std::vector<siz
 
 // Методы для антижадного алгоритма
 
-void EuclideanGraph::calcAntigreedy() {
+std::vector<size_t> EuclideanGraph::CalcAntigreedy() {
     // лог изменений
     std::stack<std::vector<size_t>> log;
 
@@ -278,55 +283,49 @@ void EuclideanGraph::calcAntigreedy() {
         Processing(deleteEdge, edges, adj_matrix);
         Processing(fixEdge, edges, adj_matrix);
 
-        if (CheckGraph(fixEdge, adj_matrix)) {
+        if (CheckGraph(fixEdge, edges, adj_matrix)) {
             log.push(fixEdge);
         }
 
-        if (CheckGraph(deleteEdge, adj_matrix)) {
+        if (CheckGraph(deleteEdge, edges, adj_matrix)) {
             log.push(deleteEdge);
         }
 
         max_edge_idx = std::find(log.top().begin(), log.top().end(), 1) - log.top().begin();
     }
 
-    std::vector<Edge> result;
+    std::vector<std::vector<size_t>> neighbours(points_.size());
 
     for (size_t i = 0; i < log.top().size(); ++i) {
         if (log.top()[i] == 2) {
-            result.push_back(edges[i]);
+            std::cout << i << " " << edges[i].first_idx_ << " " << edges[i].second_idx_ << "\n";
+            size_t from = edges[i].first_idx_;
+            size_t to = edges[i].second_idx_;
+            neighbours[from].push_back(to);
+            neighbours[to].push_back(from);
         }
     }
 
-    double ans = 0;
-    for (Edge e: result) {
-        ans += e.weight_;
-    }
-    vector<vector<int>> g((size_t) points_.size());
-    cout << "Длина пути: ";
-    cout << ans << '\n';
+    std::vector<size_t> result;
+    result.push_back(0);
 
-    for (auto &e: result) {
-        g[e.first_idx_].push_back(e.second_idx_);
-        g[e.second_idx_].push_back(e.first_idx_);
-    }
-    cout << "Порядок точек: ";
-    cout << "0 ";
-    int prev = 0;
-    int cur = g[prev][0];
-    for (int i = 0; i < points_.size() - 1; ++i) {
-        cout << cur << ' ';
-        if (g[cur][0] != prev) {
-            prev = cur;
-            cur = g[cur][0];
+    size_t prev = 0;
+    size_t curr = neighbours[prev][0];
+    for (size_t i = 1; i < points_.size(); ++i) {
+        result.push_back(curr);
+        if (neighbours[curr][0] == prev) {
+            prev = curr;
+            curr = neighbours[curr][1];
         } else {
-            prev = cur;
-            cur = g[cur][1];
+            prev = curr;
+            curr = neighbours[curr][0];
         }
     }
 
+    return result;
 }
 
-bool EuclideanGraph::CheckGraph(const std::vector<size_t>& currState, const std::vector<std::vector<size_t>>& adj_matrix) {
+bool EuclideanGraph::CheckGraph(const std::vector<size_t>& currState, const std::vector<EuclideanGraph::Edge>& edges, const std::vector<std::vector<size_t>>& adj_matrix) {
     for (size_t i = 0; i < points_.size(); ++i) {
         size_t fixed_cnt = 0;
         size_t deleted_cnt = 0;
@@ -350,6 +349,39 @@ bool EuclideanGraph::CheckGraph(const std::vector<size_t>& currState, const std:
             return false;
         }
     }
+    // В случае, если рёбер хотя бы число вершин - 1, нужно проверить связность
+    if (std::count(currState.begin(), currState.end(), 2) >= points_.size() - 1) {
+        std::vector<std::vector<size_t>> neighbours(points_.size());
+        std::vector<size_t> visited(points_.size(), 0);
+
+        // запомним соседей каждой вершины
+        for (size_t i = 0; i < currState.size(); ++i) {
+            if (currState[i] == 2) {
+                size_t from = edges[i].first_idx_;
+                size_t to = edges[i].second_idx_;
+                neighbours[from].push_back(to);
+                neighbours[to].push_back(from);
+            }
+        }
+
+        std::queue<size_t> q;
+        q.push(0);
+        visited[0] = 1;
+
+        while (!q.empty()) {
+            size_t curr = q.front();
+            q.pop();
+            for (size_t neighbour: neighbours[curr]) {
+                if (!visited[neighbour]) {
+                    q.push(neighbour);
+                    visited[neighbour] = 1;
+                }
+            }
+        }
+        if (std::count(visited.begin(), visited.end(), 1) < points_.size()) {
+            return false;
+        }
+    }
     return true;
 }
 
@@ -365,6 +397,7 @@ void EuclideanGraph::Processing(std::vector<size_t>& currState, const std::vecto
         for (size_t i = 0; i < points_.size(); ++i) {
             size_t fixed_cnt = 0;
             size_t deleted_cnt = 0;
+
             // Проходимся по смежным рёбрам
             for (size_t j = 0; j < points_.size(); ++j) {
                 if (j == i) {
@@ -381,7 +414,7 @@ void EuclideanGraph::Processing(std::vector<size_t>& currState, const std::vecto
                 }
             }
             // Если два ребра добавлены, удаляем остальные
-            if (fixed_cnt >= 2) {
+            if (fixed_cnt == 2) {
                 for (size_t edge_number: adj_matrix[i]) {
                     if (currState[edge_number] != 2) {
                         currState[edge_number] = 0;
@@ -389,7 +422,7 @@ void EuclideanGraph::Processing(std::vector<size_t>& currState, const std::vecto
                 }
             }
             // Если все ребра, кроме двух, удалены, добавляем оставшиеся 2 ребра
-            if (deleted_cnt >= (points_.size() - 1) - 2) {
+            if (deleted_cnt == (points_.size() - 1) - 2) {
                 for (size_t edge_number: adj_matrix[i]) {
                     if (currState[edge_number] != 0) {
                         currState[edge_number] = 2;
@@ -415,7 +448,6 @@ void EuclideanGraph::RemovingSmallCycles(size_t n_start, size_t n_end, std::vect
     std::vector<int> visited(points_.size(), 0);
     visited[n_start] = 1;
     visited[n_end] = 1;
-
     int curr = 0;
     do {
         // номер ребра, соединяющего текущую вершину с конечной
